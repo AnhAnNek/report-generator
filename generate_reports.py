@@ -7,6 +7,11 @@ INPUT_FILE = "input/TranVanAn.xlsx"
 OUTPUT_DIR = Path("Generate")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
+# Set the reference date and its Day number for the Fresher counter.
+# Example: 28/04/2026 is Day 69, then 29/04/2026 becomes Day 70, etc.
+DAY_COUNT_REFERENCE_DATE = datetime(2026, 4, 28)
+DAY_COUNT_REFERENCE_NUMBER = 69
+
 
 # ========================
 # Utils
@@ -40,6 +45,45 @@ def date_to_display(date_obj):
 
 def date_to_folder(date_obj):
     return date_obj.strftime("%Y-%m-%d")
+
+
+def normalize_percent(percent):
+    if percent is None:
+        return None
+
+    if isinstance(percent, str):
+        try:
+            return float(percent.strip().rstrip("%"))
+        except ValueError:
+            return None
+
+    if isinstance(percent, (int, float)):
+        return float(percent)
+
+    return None
+
+
+def format_percent_value(percent):
+    normalized = normalize_percent(percent)
+    if normalized is None:
+        return "0-100%"
+    if normalized >= 100:
+        return "100%"
+    if normalized.is_integer():
+        normalized = int(normalized)
+    return f"{normalized}-100%"
+
+
+def is_task_complete(percent):
+    normalized = normalize_percent(percent)
+    return normalized is not None and normalized >= 100
+
+
+def date_to_day_number(date_obj):
+    if date_obj is None:
+        return None
+
+    return DAY_COUNT_REFERENCE_NUMBER + (date_obj.date() - DAY_COUNT_REFERENCE_DATE.date()).days
 
 
 def get_week_start(date_obj):
@@ -158,14 +202,14 @@ def generate_reports_by_date(daily_data, tasks):
         date_obj = items[0]["date_obj"]
         date_display = items[0]["date"]
 
-        # Get next date for NEXT DAY
-        next_date_key = sorted_dates[i + 1] if i + 1 < len(sorted_dates) else None
-        if next_date_key:
-            next_items = grouped_by_date[next_date_key]
-            next_task_dict = {item["task_id"]: item for item in next_items}
-            next_tasks = "\n".join([f"- {item['task_name']}" for item in next_task_dict.values()])
-        else:
-            next_tasks = "- N/A"
+        # Build next-day work list from current unfinished tasks
+        next_tasks_list = []
+        for item in items:
+            task = tasks.get(item["task_id"], {})
+            percent = task.get("percent")
+            if not is_task_complete(percent):
+                next_tasks_list.append(f"- {item['task_name']}. `{format_percent_value(percent)}`")
+        next_tasks = "\n".join(next_tasks_list) if next_tasks_list else "- N/A"
 
         daily_dir = get_daily_dir(date_obj)
 
@@ -173,43 +217,13 @@ def generate_reports_by_date(daily_data, tasks):
         difficulties_list = []
         for item in items:
             task = tasks.get(item["task_id"], {})
-            note = task.get("note") or "N/A"
-            difficulties_list.append(f"- {note}")
-        difficulties_str = "\n".join(difficulties_list) if difficulties_list else "N/A"
+            note = task.get("note")
+            if note:
+                difficulties_list.append(f"- {note}")
+        difficulties_str = "\n".join(difficulties_list)
 
-        # ===== Báo cáo đầu ngày =====
-        today_tasks = []
-        for item in items:
-            task = tasks.get(item["task_id"], {})
-            percent = task.get("percent")
-            percent_str = f"{percent}%" if percent is not None else "0-100%"
-            today_tasks.append(f"- {item['task_name']}. `{percent_str}%`")
-        today_tasks_str = "\n".join(today_tasks)
-
-        morning_report = f"""**Daily Report < {date_display} > **
-**Fresher: Trần Văn An**
-
---------------------------------------------------------------------------------------
-
-Nội dung công việc ngày hôm nay:
-{today_tasks_str}
-
---------------------------------------------------------------------------------------
-
-Khó khăn:
-{difficulties_str}
-
---------------------------------------------------------------------------------------
-
->Trello: https://trello.com/invite/b/6964c51e61b18697c47479cc/ATTIc1d3d8fe352d07f88ecb34cd8891b592A33ED4BB/fresher-dev
-GitHub: https://github.com/antv-runs
-Drive: https://drive.google.com/drive/folders/1d9RUUju0d78LPTJanfvLscxcBeZckvA_?usp=sharing
-"""
-
-        (daily_dir / "Báo cáo đầu ngày.txt").write_text(
-            morning_report,
-            encoding="utf-8",
-        )
+        day_number = date_to_day_number(date_obj)
+        fresher_day = f" Day {day_number}" if day_number is not None else ""
 
         # ===== Báo cáo cuối ngày =====
         done_tasks = []
@@ -217,11 +231,11 @@ Drive: https://drive.google.com/drive/folders/1d9RUUju0d78LPTJanfvLscxcBeZckvA_?
             task = tasks.get(item["task_id"], {})
             percent = task.get("percent")
             percent_str = f"{percent}%" if percent is not None else "100%"
-            done_tasks.append(f"- {item['task_name']}. `{percent_str}%`")
+            done_tasks.append(f"- {item['task_name']}. `{percent_str}`")
         done_tasks_str = "\n".join(done_tasks)
 
         eod_report = f"""**Daily Report < {date_display} > **
-**Fresher: Trần Văn An**
+**Fresher: Trần Văn An{fresher_day}**
 
 --------------------------------------------------------------------------------------
 
@@ -232,11 +246,6 @@ Nội dung công việc ngày hôm nay:
 
 Nội dung công việc ngày mai:
 {next_tasks}
-
---------------------------------------------------------------------------------------
-
-Khó khăn:
-{difficulties_str}
 
 --------------------------------------------------------------------------------------
 
@@ -266,7 +275,7 @@ Drive: https://drive.google.com/drive/folders/1d9RUUju0d78LPTJanfvLscxcBeZckvA_?
             percent = task.get("percent")
             percent_str = f"{percent}%" if percent is not None else "100%"
 
-            du2_lines.append(f" -   {item['task_name']}. `{percent_str}%`")
+            du2_lines.append(f" -   {item['task_name']}. `{percent_str}`")
             du2_lines.append(f"    - Time estimate: {estimate_h}h")
             du2_lines.append(f"    - Time complete: {actual_h}h")
             du2_lines.append(f"    - Difficulties at work: {note}")
