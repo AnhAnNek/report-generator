@@ -1,0 +1,8 @@
+❖ Daily Report [{date_display}]
+TODAY:
+-----
+{du2_entries}
+
+NEXT DAY:
+-----
+{next_tasks}

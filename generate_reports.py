@@ -7,10 +7,48 @@ INPUT_FILE = "input/TranVanAn.xlsx"
 OUTPUT_DIR = Path("Generate")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
+TEMPLATE_DIR = Path("templates")
+
 # Set the reference date and its Day number for the Fresher counter.
 # Example: 28/04/2026 is Day 69, then 29/04/2026 becomes Day 70, etc.
 DAY_COUNT_REFERENCE_DATE = datetime(2026, 4, 28)
 DAY_COUNT_REFERENCE_NUMBER = 69
+
+
+def load_template(template_name):
+    return (TEMPLATE_DIR / template_name).read_text(encoding="utf-8")
+
+
+def normalize_percent(percent):
+    if percent is None:
+        return None
+
+    if isinstance(percent, str):
+        try:
+            return float(percent.strip().rstrip("%"))
+        except ValueError:
+            return None
+
+    if isinstance(percent, (int, float)):
+        return float(percent)
+
+    return None
+
+
+def format_percent_value(percent):
+    normalized = normalize_percent(percent)
+    if normalized is None:
+        return "0-100%"
+    if normalized >= 100:
+        return "100%"
+    if normalized.is_integer():
+        normalized = int(normalized)
+    return f"{normalized}-100%"
+
+
+def is_task_complete(percent):
+    normalized = normalize_percent(percent)
+    return normalized is not None and normalized >= 100
 
 
 # ========================
@@ -213,17 +251,11 @@ def generate_reports_by_date(daily_data, tasks):
 
         daily_dir = get_daily_dir(date_obj)
 
-        # Prepare difficulties for morning and EOD
-        difficulties_list = []
-        for item in items:
-            task = tasks.get(item["task_id"], {})
-            note = task.get("note")
-            if note:
-                difficulties_list.append(f"- {note}")
-        difficulties_str = "\n".join(difficulties_list)
-
         day_number = date_to_day_number(date_obj)
         fresher_day = f" Day {day_number}" if day_number is not None else ""
+
+        eod_template = load_template("bao_cao_cuoi_ngay.txt")
+        du2_template = load_template("bao_cao_du2.txt")
 
         # ===== Báo cáo cuối ngày =====
         done_tasks = []
@@ -234,25 +266,12 @@ def generate_reports_by_date(daily_data, tasks):
             done_tasks.append(f"- {item['task_name']}. `{percent_str}`")
         done_tasks_str = "\n".join(done_tasks)
 
-        eod_report = f"""**Daily Report < {date_display} > **
-**Fresher: Trần Văn An{fresher_day}**
-
---------------------------------------------------------------------------------------
-
-Nội dung công việc ngày hôm nay:
-{done_tasks_str}
-
---------------------------------------------------------------------------------------
-
-Nội dung công việc ngày mai:
-{next_tasks}
-
---------------------------------------------------------------------------------------
-
->Trello: https://trello.com/invite/b/6964c51e61b18697c47479cc/ATTIc1d3d8fe352d07f88ecb34cd8891b592A33ED4BB/fresher-dev
-GitHub: https://github.com/antv-runs
-Drive: https://drive.google.com/drive/folders/1d9RUUju0d78LPTJanfvLscxcBeZckvA_?usp=sharing
-"""
+        eod_report = eod_template.format(
+            date_display=date_display,
+            fresher_day=fresher_day,
+            done_tasks_str=done_tasks_str,
+            next_tasks=next_tasks,
+        )
 
         (daily_dir / "Báo cáo cuối ngày.txt").write_text(
             eod_report,
@@ -260,11 +279,7 @@ Drive: https://drive.google.com/drive/folders/1d9RUUju0d78LPTJanfvLscxcBeZckvA_?
         )
 
         # ===== Báo cáo DU2 =====
-        du2_lines = [
-            f"❖ Daily Report [{date_display}]",
-            "TODAY:",
-            "-----",
-        ]
+        du2_entries = []
 
         for item in items:
             task = tasks.get(item["task_id"], {})
@@ -275,23 +290,21 @@ Drive: https://drive.google.com/drive/folders/1d9RUUju0d78LPTJanfvLscxcBeZckvA_?
             percent = task.get("percent")
             percent_str = f"{percent}%" if percent is not None else "100%"
 
-            du2_lines.append(f" -   {item['task_name']}. `{percent_str}`")
-            du2_lines.append(f"    - Time estimate: {estimate_h}h")
-            du2_lines.append(f"    - Time complete: {actual_h}h")
-            du2_lines.append(f"    - Difficulties at work: {note}")
-            du2_lines.append("    - Lessons learned: N/A")  # TODO: Map from Excel if lesson column is added later
-            du2_lines.append("")
+            du2_entries.append(f" -   {item['task_name']}. `{percent_str}`")
+            du2_entries.append(f"    - Time estimate: {estimate_h}h")
+            du2_entries.append(f"    - Time complete: {actual_h}h")
+            du2_entries.append(f"    - Difficulties at work: {note}")
+            du2_entries.append("    - Lessons learned: N/A")
+            du2_entries.append("")
 
-        du2_lines.extend([
-            "",
-            "",
-            "NEXT DAY:",
-            "-----",
-            next_tasks,
-        ])
+        du2_report = du2_template.format(
+            date_display=date_display,
+            du2_entries="\n".join(du2_entries).rstrip(),
+            next_tasks=next_tasks,
+        )
 
         (daily_dir / "Báo cáo DU2.txt").write_text(
-            "\n".join(du2_lines),
+            du2_report,
             encoding="utf-8",
         )
 

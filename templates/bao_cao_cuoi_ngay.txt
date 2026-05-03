@@ -1,0 +1,18 @@
+**Daily Report < {date_display} > **
+**Fresher: Trần Văn An{fresher_day}**
+
+--------------------------------------------------------------------------------------
+
+Nội dung công việc ngày hôm nay:
+{done_tasks_str}
+
+--------------------------------------------------------------------------------------
+
+Nội dung công việc ngày mai:
+{next_tasks}
+
+--------------------------------------------------------------------------------------
+
+>Trello: https://trello.com/invite/b/6964c51e61b18697c47479cc/ATTIc1d3d8fe352d07f88ecb34cd8891b592A33ED4BB/fresher-dev
+GitHub: https://github.com/antv-runs
+Drive: https://drive.google.com/drive/folders/1d9RUUju0d78LPTJanfvLscxcBeZckvA_?usp=sharing
